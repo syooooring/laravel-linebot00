@@ -8,6 +8,7 @@ use LINE\LINEBot;
 use LINE\LINEBot\Event\MessageEvent\TextMessage;
 use LINE\LINEBot\HTTPClient\CurlHTTPClient;
 //LINEBotクラスのインスタンス化
+use App\Services\Gurunavi;
 
 
 class LineBotController extends Controller
@@ -18,7 +19,7 @@ class LineBotController extends Controller
     }
 
     //$requestの前に、Requestと付いているが、これは$requestがIlluminate\Http\Requestクラスのインスタンスであることを示している。
-    public function parrot(Request $request)
+    public function restaurants(Request $request)
     {
         Log::debug($request->header());
         Log::debug($request->input());
@@ -61,8 +62,32 @@ class LineBotController extends Controller
             //もし、TextMessageでなければ、その旨をログファイルに表示。
             //そして何もせずにforeachでの次の$eventの処理に入ることができるよう、continueを行う。
 
+            $gurunavi = new Gurunavi();
+            $gurunaviResponse = $gurunavi->searchRestaurants($event->getText());
+            //Gurunaviクラス生成(インスタンス化)、$gurunaviに代入
+            //getTextメソッドでユーザーからのメッセージを取り出し、これをsearchRestaurantsメソッドに渡す。
+            //searchRestaurantsメソッドで、その渡されたメッセージを使いぐるなびのレストラン検索を行う。
+            //検索結果の連想配列が$gurunaviResponseに代入されます。
+
+            if (array_key_exists('error', $gurunaviResponse)) {
+                $replyText = $gurunaviResponse['error'][0]['message'];
+                $replyToken = $event->getReplyToken();
+                $lineBot->replyText($replyToken, $replyText);
+                continue;
+            }
+            //array_key_exists('error', $gurunaviResponseで、errorであるキーが存在するかを調べ、存在する場合はエラーメッセージを返信。
+
+            $replyText = '';
+            foreach($gurunaviResponse['rest'] as $restaurant) {
+                $replyText .=
+                    $restaurant['name'] . "\n" .
+                    $restaurant['url'] . "\n" .
+                    "\n";
+            }
+            //連想配列から、'name'と'url'の値を取り出し、文字列演算子.を使って結合させて$replyTextに代入。
+            //"\n"は改行
+
             $replyToken = $event->getReplyToken();
-            $replyText = $event->getText();
             $lineBot->replyText($replyToken, $replyText);
             //応答メッセージを送るには、Webhookイベントオブジェクトに含まれる応答トークン(replyToken)が必要
             //$eventはTextMessageクラスのインスタンスだが、そのgetReplyTokenメソッドで、応答トークンを取り出す。
