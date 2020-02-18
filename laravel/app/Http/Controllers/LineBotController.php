@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Gurunavi;
+use App\Services\RestaurantBubbleBuilder;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use LINE\LINEBot;
 use LINE\LINEBot\Event\MessageEvent\TextMessage;
 use LINE\LINEBot\HTTPClient\CurlHTTPClient;
 //LINEBotクラスのインスタンス化
-use App\Services\Gurunavi;
+use LINE\LINEBot\MessageBuilder\FlexMessageBuilder;
+use LINE\LINEBot\MessageBuilder\Flex\ContainerBuilder\CarouselContainerBuilder;
+
 
 
 class LineBotController extends Controller
@@ -77,24 +82,30 @@ class LineBotController extends Controller
             }
             //array_key_exists('error', $gurunaviResponseで、errorであるキーが存在するかを調べ、存在する場合はエラーメッセージを返信。
 
-            $replyText = '';
-            foreach($gurunaviResponse['rest'] as $restaurant) {
-                $replyText .=
-                    $restaurant['name'] . "\n" .
-                    $restaurant['url'] . "\n" .
-                    "\n";
+            $bubbles = [];
+            //$bubblesに空の配列を代入して初期化
+            foreach ($gurunaviResponse['rest'] as $restaurant) {
+                $bubble = RestaurantBubbleBuilder::builder();
+                $bubble->setContents($restaurant);
+                $bubbles[] = $bubble;
             }
-            //連想配列から、'name'と'url'の値を取り出し、文字列演算子.を使って結合させて$replyTextに代入。
-            //"\n"は改行
+            //2行目ぐるなびAPIのレスポンスから飲食店検索結果の情報を1個ずつ取り出し、繰り返し処理を行なう
+            //3行目RestaurantBubbleBuilderクラスの空のインスタンスを生成
+            //4行目setContensメソッドでは、飲食店検索結果の情報をRestaurantBubbleBuilderインスタンスが持つ各種プロパティに代入
+            //5行目配列$bubblesの最後に、RestaurantBubbleBuilderインスタンスを追加
 
-            $replyToken = $event->getReplyToken();
-            $lineBot->replyText($replyToken, $replyText);
-            //応答メッセージを送るには、Webhookイベントオブジェクトに含まれる応答トークン(replyToken)が必要
-            //$eventはTextMessageクラスのインスタンスだが、そのgetReplyTokenメソッドで、応答トークンを取り出す。
-            //LINEBotクラスのreplyTextメソッドで、テキストメッセージでの返信が行われる。
-            //第一引数に応答トークン、第二引数に返信内容のテキストを渡す。
-            //第二引数は、変数$replyTextを渡しているが、これは2行目でgetTextメソッドで返された内容が代入されている
-            //getTextメソッドで送られてきたメッセージのテキストを取り出し、結果としてオウム返しになる。
+            $carousel = CarouselContainerBuilder::builder();
+            //CarouselContainerBuilderクラスの空のインスタンスを生成し、さきほど登場した$carouselに代入
+            $carousel->setContents($bubbles);
+            //setContentsメソッドでは、CarouselContainerBuilderインスタンスのプロパティcontentsに、$bubblesを代入
+
+            $flex = FlexMessageBuilder::builder();
+            //空のインスタンス生成
+            //builderメソッドは、空のインスタンスを生成する、FlexMessageBuilderのstaticメソッド
+            $flex->setAltText('飲食店検索結果');
+            $flex->setContents($carousel);
+
+            $lineBot->replyMessage($event->getReplyToken(), $flex);
         }
     }
 }
